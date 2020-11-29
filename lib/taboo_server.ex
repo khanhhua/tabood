@@ -22,8 +22,8 @@ defmodule TabooServer do
       {:active, false},
       {:ip, ip}
     ]
-    {:ok, game_pid} = TabooGame.start()
-    IO.inspect game_pid, label: "GAME PID"
+    {:ok, game_pid} = TabooGame.start_link()
+    IO.inspect game_pid, label: "Game PID"
 
     case :gen_tcp.listen(port, opts) do
       {:ok, listen_socket} ->
@@ -39,11 +39,12 @@ defmodule TabooServer do
     {:ok, client_socket} = :gen_tcp.accept(server_state(state, :socket))
     IO.inspect(client_socket, label: "Incoming connection")
 
-    {:ok, pid} = TabooClient.start_link(client_socket)
-    IO.inspect(pid, label: "Client handler")
+    {:ok, pid} = TabooGame.from_registry("game1")
+    IO.inspect(pid, label: "Game PID")
     case :gen_tcp.controlling_process(client_socket, pid) do
       :ok ->
         :gen_server.cast(self(), :accept)
+        TabooGame.join(pid, client_socket)
       {:error, reason} ->
         IO.puts("Could not transfer control to client handler #{reason}")
     end

@@ -8,6 +8,7 @@ defmodule TabooServer.Application do
   def start(_type, _args) do
     children = [
       # Starts a worker by calling: TabooServer.Worker.start_link(arg)
+      {Registry, [keys: :unique, name: Registry.GameRegistry]},
       {TabooServer, [{127,0,0,1}, 1818]}
     ]
 
