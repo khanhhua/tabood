@@ -8,6 +8,8 @@ defmodule TabooServer do
 
   Record.defrecord :server_state, [socket: nil]
 
+  @max_clients_per_game 4
+
   def start_link([ip, port]) do
     GenServer.start_link(__MODULE__, [ip, port], [])
   end
@@ -22,8 +24,7 @@ defmodule TabooServer do
       {:active, false},
       {:ip, ip}
     ]
-    {:ok, game_pid} = TabooGame.start_link()
-    IO.inspect game_pid, label: "Game PID"
+    create_game()
 
     case :gen_tcp.listen(port, opts) do
       {:ok, listen_socket} ->
@@ -39,15 +40,28 @@ defmodule TabooServer do
     {:ok, client_socket} = :gen_tcp.accept(server_state(state, :socket))
     IO.inspect(client_socket, label: "Incoming connection")
 
-    {:ok, pid} = TabooGame.from_registry("game1")
-    IO.inspect(pid, label: "Game PID")
+    {:ok, pid} = TabooGame.from_registry(:game1)
+    IO.inspect(pid, label: "45 Game PID")
     case :gen_tcp.controlling_process(client_socket, pid) do
       :ok ->
-        :gen_server.cast(self(), :accept)
+        GenServer.cast(self(), :accept)
         TabooGame.join(pid, client_socket)
+        if TabooGame.count_clients(pid) >= @max_clients_per_game do
+          create_game()
+        end
       {:error, reason} ->
         IO.puts("Could not transfer control to client handler #{reason}")
     end
     {:noreply, state}
+  end
+
+  def create_game do
+    IO.puts "Creating a new game"
+    with {:ok, pid} <- TabooGame.from_registry(:game1) do
+      TabooGame.unregister(pid)
+    end
+
+    {:ok, game_pid} = TabooGame.start_link()
+    IO.inspect game_pid, label: "Game PID"
   end
 end

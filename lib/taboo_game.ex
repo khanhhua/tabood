@@ -7,7 +7,7 @@ defmodule TabooGame do
 
   @spec start_link :: :ignore | {:error, any} | {:ok, pid}
   def start_link() do
-    name = {:via, Registry, {Registry.GameRegistry, "game1"}}
+    name = {:via, Registry, {Registry.GameRegistry, :game1}}
     GenStateMachine.start_link(__MODULE__, [], name: name)
   end
 
@@ -19,6 +19,8 @@ defmodule TabooGame do
     end
   end
 
+  def unregister(pid), do: GenStateMachine.call(pid, :unregister)
+
   def init([]) do
     Process.flag(:trap_exit, true)
     {:ok, :awaiting_players, client_data()}
@@ -26,6 +28,7 @@ defmodule TabooGame do
 
   def join(pid, client_socket), do: GenStateMachine.call(pid, {:join, client_socket})
 
+  def count_clients(pid), do: GenStateMachine.call(pid, :count_clients)
   # STATE CALLBACK FUNCTIONS
 
   def awaiting_players(:info, {:tcp, _socket, cmdline}, state) do
@@ -56,11 +59,23 @@ defmodule TabooGame do
       false -> {:next_state, :awaiting_players, next_state, [{:reply, from_ref, :ok}]}
     end
   end
+  def awaiting_players({:call, from_ref}, :count_clients, state) do
+    count = length(client_data(state, :sockets))
+    {:keep_state_and_data, [{:reply, from_ref, count}]}
+  end
 
   @spec in_game(any, any, any) :: :keep_state_and_data | {:next_state, any, any}
   def in_game({:call, from_ref}, {:join, client_socket}, state) do
     next_state = accept_client_socket(state, client_socket)
     {:next_state, :in_game, next_state, [{:reply, from_ref, :ok}]}
+  end
+  def in_game({:call, from_ref}, :count_clients, state) do
+    count = length(client_data(state, :sockets))
+    {:keep_state_and_data, [{:reply, from_ref, count}]}
+  end
+  def in_game({:call, from_ref}, :unregister, _state) do
+    Registry.unregister(Registry.GameRegistry, :game1)
+    {:keep_state_and_data, [{:reply, from_ref, :ok}]}
   end
 
   def in_game(:info, {:tcp, socket, cmdline}, state) do
